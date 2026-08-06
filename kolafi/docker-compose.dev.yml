@@ -1,0 +1,133 @@
+services:
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - kolafi_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/kolafi
+      "
+
+  kolafi-web:
+    build:
+      context: ./kolafi-web
+      dockerfile: Dockerfile.dev
+    volumes:
+      # 開發時即時更新程式碼
+      - kolafi_wrangler_data:/app/.wrangler # D1（本機模擬）、快取等 wrangler 狀態，跨重啟持久化
+      - ./kolafi-web/src:/app/src
+      - ./kolafi-web/public:/app/public
+      - ./kolafi-web/functions:/app/functions
+      - ./kolafi-web/server:/app/server
+      - ./kolafi-web/index.html:/app/index.html
+      - ./kolafi-web/env.d.ts:/app/env.d.ts
+      - ./kolafi-web/worker-configuration.d.ts:/app/worker-configuration.d.ts
+      - ./kolafi-web/package.json:/app/package.json
+      - ./kolafi-web/package-lock.json:/app/package-lock.json
+      - ./kolafi-web/vite.config.ts:/app/vite.config.ts
+      - ./kolafi-web/wrangler.jsonc:/app/wrangler.jsonc
+      - ./kolafi-web/tsconfig.json:/app/tsconfig.json
+      - ./kolafi-web/tsconfig.app.json:/app/tsconfig.app.json
+      - ./kolafi-web/tsconfig.node.json:/app/tsconfig.node.json
+      - ./kolafi-web/tsconfig.functions.json:/app/tsconfig.functions.json
+      - ./kolafi-web/tsconfig.worker.json:/app/tsconfig.worker.json
+    environment:
+      - NODE_ENV=development
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_BUCKET=kolafi
+      - S3_FORCE_PATH_STYLE=true
+      - WORKER_NOTIFY_URL=http://kolafi-worker:8080
+    ports:
+      - "11001:11001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11001/"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  kolafi-web-init:
+    image: curlimages/curl:latest
+    depends_on:
+      kolafi-web:
+        condition: service_healthy
+    command: ["-fsS", "-X", "POST", "http://kolafi-web:11001/api/initdb"]
+
+  kolafi-worker:
+    build: ./kolafi-worker
+    volumes:
+      # 開發時即時更新程式碼
+      - ./kolafi-worker/main.py:/app/main.py
+      - ./kolafi-worker/shared/logger.py:/app/shared/logger.py
+      - ./kolafi-worker/shared/s3_client.py:/app/shared/s3_client.py
+      - ./kolafi-worker/shared/task_api_client.py:/app/shared/task_api_client.py
+      - ./kolafi-worker/shared/web_sandbox_client.py:/app/shared/web_sandbox_client.py
+      - ./kolafi-worker/shared/worker_framework.py:/app/shared/worker_framework.py
+      - ./kolafi-worker/thumbnail/thumbnail_generator.py:/app/thumbnail/thumbnail_generator.py
+      - ./kolafi-worker/thumbnail/thumbnail_worker.py:/app/thumbnail/thumbnail_worker.py
+      - ./kolafi-worker/cleanup/cleanup_worker.py:/app/cleanup/cleanup_worker.py
+      - ./kolafi-worker/caption/caption_worker.py:/app/caption/caption_worker.py
+      - ./kolafi-worker/caption/gemini_client.py:/app/caption/gemini_client.py
+      - ./kolafi-worker/export/config_selector.py:/app/export/config_selector.py
+      - ./kolafi-worker/export/export_worker.py:/app/export/export_worker.py
+      - ./kolafi-worker/export/video_composer.py:/app/export/video_composer.py
+      - ./kolafi-worker/tag/google_image_search.py:/app/tag/google_image_search.py
+      - ./kolafi-worker/tag/keyword_analyzer.py:/app/tag/keyword_analyzer.py
+      - ./kolafi-worker/tag/tag_google_image_search.py:/app/tag/tag_google_image_search.py
+      - ./kolafi-worker/tag/tag_worker.py:/app/tag/tag_worker.py
+      - ./kolafi-worker/download/download_google_image_search.py:/app/download/download_google_image_search.py
+      - ./kolafi-worker/download/download_worker.py:/app/download/download_worker.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KOLAFI_API_BASE_URL=http://kolafi-web:11001
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_BUCKET=kolafi
+      - S3_FORCE_PATH_STYLE=true
+      - WEB_SANDBOX_BASE_URL=${WEB_SANDBOX_BASE_URL}
+      - WEB_SANDBOX_TOKEN=${WEB_SANDBOX_TOKEN}
+      - WEB_SANDBOX_PROFILE_ID=${WEB_SANDBOX_PROFILE_ID}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
+      - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS}
+      - PORT=8080
+      - IDLE_POLL_INTERVAL_SECONDS=600
+      - API_ERROR_BACKOFF_SECONDS=5
+      - LOG_LEVEL=INFO
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      kolafi-web-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  kolafi_wrangler_data:
+  kolafi_minio_data:
