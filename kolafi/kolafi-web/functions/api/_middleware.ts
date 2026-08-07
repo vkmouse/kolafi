@@ -15,6 +15,9 @@ import { ACCESS_TOKEN_COOKIE_NAME, getCookie } from '../utils/cookie'
 const SKIP_AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh'])
 const SKIP_AUTH_PREFIXES = ['/api/internal/']
 
+// DEBUG: 下面三個 401 回應都帶了詳細除錯資訊，正式上線前要改回單純的
+// `new Response('Unauthorized', { status: 401 })`，避免把內部細節曝露給前端。
+
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { env, request } = context
   const { pathname } = new URL(request.url)
@@ -25,17 +28,51 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   if (!env.APP_JWT_SECRET) {
     console.error('[auth] 缺少環境變數 APP_JWT_SECRET')
-    return new Response('Unauthorized', { status: 401 })
+    return Response.json(
+      {
+        error: 'Unauthorized',
+        stage: 'env-check',
+        pathname,
+        reason: '缺少環境變數 APP_JWT_SECRET',
+        expected: 'APP_JWT_SECRET 應該要在 Pages 專案的環境變數 / secret 裡設定',
+        actual: 'env.APP_JWT_SECRET 為空字串或 undefined',
+      },
+      { status: 401 },
+    )
   }
 
   const token = getCookie(request.headers.get('Cookie'), ACCESS_TOKEN_COOKIE_NAME)
   if (!token) {
-    return new Response('Unauthorized', { status: 401 })
+    return Response.json(
+      {
+        error: 'Unauthorized',
+        stage: 'cookie-check',
+        pathname,
+        reason: `請求裡沒有 ${ACCESS_TOKEN_COOKIE_NAME} cookie`,
+        expected: `Cookie header 應包含 ${ACCESS_TOKEN_COOKIE_NAME}=<access token>`,
+        actual: request.headers.get('Cookie')
+          ? 'Cookie header 存在，但找不到這個 cookie 名稱'
+          : 'Cookie header 完全不存在',
+        hint: '確認前端有帶 credentials（fetch 需要 credentials: "include"），以及是否已經先成功呼叫過 /api/auth/login 拿到 cookie。',
+      },
+      { status: 401 },
+    )
   }
 
   const valid = await verifyAppToken(env.APP_JWT_SECRET, token, 'access')
-  if (!valid) {
-    return new Response('Unauthorized', { status: 401 })
+  if (!valid.ok) {
+    console.error('[auth] verifyAppToken(access) 失敗:', valid.reason)
+    return Response.json(
+      {
+        error: 'Unauthorized',
+        stage: 'verifyAppToken',
+        pathname,
+        reason: valid.reason ?? '未知原因',
+        expected: 'token 的 payload.type 應為 "access"，且簽章／效期需合法',
+        hint: '常見原因：1) access token 已過期（TTL 8 小時），應該讓前端呼叫 /api/auth/refresh 換發新的 2) APP_JWT_SECRET 換過導致舊 token 簽章對不上。',
+      },
+      { status: 401 },
+    )
   }
 
   return await context.next()
