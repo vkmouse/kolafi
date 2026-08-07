@@ -65,7 +65,7 @@ export const onRequestPost: PagesFunction<Env, 'task_id'> = async (context) => {
       context.env.DB,
     )
     if (result.notifyThumbnail) {
-      await notifyWorker(context.env.WORKER_NOTIFY_URL, 'THUMBNAIL')
+      await notifyWorker(context.env.KOLAFI_WORKER_BASE_URL, 'THUMBNAIL', { clientId: context.env.KOLAFI_WORKER_CF_ACCESS_CLIENT_ID, clientSecret: context.env.KOLAFI_WORKER_CF_ACCESS_CLIENT_SECRET })
     }
     return jsonSuccess()
   } catch (err) {

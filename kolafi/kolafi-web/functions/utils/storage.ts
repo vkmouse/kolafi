@@ -19,8 +19,9 @@ export interface S3Config {
   accessKeyId: string
   secretAccessKey: string
   bucket: string
-  /** path-style addressing（https://endpoint/bucket/key），MinIO 等 S3 相容服務通常需要 true */
   forcePathStyle: boolean
+  cfAccessClientId: string
+  cfAccessClientSecret: string
 }
 
 /** 讀取 S3 連線設定，各欄位皆有預設值 */
@@ -32,6 +33,16 @@ export function getS3Config(env: Env): S3Config {
     secretAccessKey: env.S3_SECRET_ACCESS_KEY || '',
     bucket: env.S3_BUCKET || 'kolafi',
     forcePathStyle: (env.S3_FORCE_PATH_STYLE || 'true') === 'true',
+    cfAccessClientId: env.S3_CF_ACCESS_CLIENT_ID || '',
+    cfAccessClientSecret: env.S3_CF_ACCESS_CLIENT_SECRET || '',
+  }
+}
+
+/** 不論有沒有值都直接帶，本地環境不會驗證這個 header */
+function cfAccessHeaders(config: S3Config): Record<string, string> {
+  return {
+    'CF-Access-Client-Id': config.cfAccessClientId,
+    'CF-Access-Client-Secret': config.cfAccessClientSecret,
   }
 }
 
@@ -99,7 +110,7 @@ export async function putObject(env: Env, key: string, body: Blob | ArrayBuffer,
   const res = await client.fetch(url, {
     method: 'PUT',
     body,
-    headers: contentType ? { 'Content-Type': contentType } : undefined,
+    headers: { ...cfAccessHeaders(config), ...(contentType ? { 'Content-Type': contentType } : {}) },
   })
 
   if (!res.ok) {
@@ -122,7 +133,7 @@ export async function getObject(env: Env, key: string): Promise<StoredObject | n
   const base = bucketBaseUrl(config)
   const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
 
-  const res = await client.fetch(url, { method: 'GET' })
+  const res = await client.fetch(url, { method: 'GET', headers: cfAccessHeaders(config) })
 
   if (res.status === 404) return null
   if (!res.ok || !res.body) {
@@ -139,7 +150,7 @@ export async function deleteObject(env: Env, key: string): Promise<void> {
   const base = bucketBaseUrl(config)
   const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
 
-  const res = await client.fetch(url, { method: 'DELETE' })
+  const res = await client.fetch(url, { method: 'DELETE', headers: cfAccessHeaders(config) })
   if (!res.ok && res.status !== 404) {
     throw new Error(`刪除物件失敗 key=${key}: HTTP ${res.status}`)
   }
@@ -179,7 +190,7 @@ async function listAllKeys(client: AwsClient, config: S3Config, prefix: string):
       listUrl.searchParams.set('continuation-token', continuationToken)
     }
 
-    const res = await client.fetch(listUrl.toString(), { method: 'GET' })
+    const res = await client.fetch(listUrl.toString(), { method: 'GET', headers: cfAccessHeaders(config) })
     if (!res.ok) {
       throw new Error(`列出物件失敗 prefix=${prefix}: HTTP ${res.status}`)
     }
@@ -204,7 +215,7 @@ async function deleteKeys(client: AwsClient, config: S3Config, keys: string[]): 
     const results = await Promise.all(
       batch.map(async (key) => {
         const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
-        const res = await client.fetch(url, { method: 'DELETE' })
+        const res = await client.fetch(url, { method: 'DELETE', headers: cfAccessHeaders(config) })
         return { key, ok: res.ok || res.status === 404 }
       }),
     )

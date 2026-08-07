@@ -25,8 +25,15 @@ S3_ACCESS_KEY_ID = os.environ.get('S3_ACCESS_KEY_ID', '')
 S3_SECRET_ACCESS_KEY = os.environ.get('S3_SECRET_ACCESS_KEY', '')
 S3_BUCKET = os.environ.get('S3_BUCKET', 'kolafi')
 S3_FORCE_PATH_STYLE = os.environ.get('S3_FORCE_PATH_STYLE', 'true') == 'true'
+S3_CF_ACCESS_CLIENT_ID = os.environ.get('S3_CF_ACCESS_CLIENT_ID', '')
+S3_CF_ACCESS_CLIENT_SECRET = os.environ.get('S3_CF_ACCESS_CLIENT_SECRET', '')
 
 _client = None
+
+
+def _add_cf_access_headers(request, **kwargs):
+    request.headers['CF-Access-Client-Id'] = S3_CF_ACCESS_CLIENT_ID
+    request.headers['CF-Access-Client-Secret'] = S3_CF_ACCESS_CLIENT_SECRET
 
 
 def get_s3_client():
@@ -43,6 +50,8 @@ def get_s3_client():
                 s3={'addressing_style': 'path' if S3_FORCE_PATH_STYLE else 'auto'}
             ),
         )
+        # 不論有沒有值都直接帶，本地環境不會驗證這個 header
+        _client.meta.events.register('before-sign.s3', _add_cf_access_headers)
     return _client
 
 

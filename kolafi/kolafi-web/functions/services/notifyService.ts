@@ -9,23 +9,38 @@
  * kolafi-worker 端路由的 task_type 是小寫（thumbnail/cleanup/...），跟 kolafi-web
  * 這邊 tasks.type 欄位慣用的大寫字串（THUMBNAIL 等）不同，這裡負責轉換。
  *
- * 刻意不 import `Env`：baseUrl 由呼叫端（API 層）從 `context.env.WORKER_NOTIFY_URL`
+ * 刻意不 import `Env`：baseUrl 由呼叫端（API 層）從 `context.env.KOLAFI_WORKER_BASE_URL`
  * 取出後當參數傳入，避免整包 `context.env` 被傳進業務邏輯層。
  */
 
 export type TaskType = 'THUMBNAIL' | 'CLEANUP' | 'CAPTION' | 'EXPORT' | 'TAG' | 'DOWNLOAD'
 
-export async function notifyWorker(baseUrl: string | undefined, taskType: TaskType): Promise<void> {
+export interface CfAccessCredentials {
+  clientId: string | undefined
+  clientSecret: string | undefined
+}
+
+export async function notifyWorker(
+  baseUrl: string | undefined,
+  taskType: TaskType,
+  cfAccess?: CfAccessCredentials,
+): Promise<void> {
   const normalizedBaseUrl = baseUrl?.replace(/\/+$/, '')
   if (!normalizedBaseUrl) {
-    console.error('[notifyWorker] 缺少 WORKER_NOTIFY_URL，略過通知（worker 仍會靠保底輪詢處理任務）')
+    console.error('[notifyWorker] 缺少 KOLAFI_WORKER_BASE_URL，略過通知（worker 仍會靠保底輪詢處理任務）')
     return
   }
 
   const url = `${normalizedBaseUrl}/notify/${taskType.toLowerCase()}`
 
   try {
-    const res = await fetch(url, { method: 'POST' })
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'CF-Access-Client-Id': cfAccess?.clientId || '',
+        'CF-Access-Client-Secret': cfAccess?.clientSecret || '',
+      },
+    })
     if (!res.ok) {
       console.error(`[notifyWorker] 通知 ${taskType} 失敗，status=${res.status}`)
     }

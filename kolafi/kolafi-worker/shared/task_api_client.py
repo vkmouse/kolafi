@@ -28,13 +28,17 @@ class TaskApiClient:
         self.task_type = task_type
         self.base_url = (base_url or os.environ.get('KOLAFI_API_BASE_URL', 'http://localhost:8788')).rstrip('/')
         self.timeout_seconds = timeout_seconds or int(os.environ.get('KOLAFI_API_TIMEOUT_SECONDS', '30'))
+        self.cf_access_headers = {
+            'CF-Access-Client-Id': os.environ.get('KOLAFI_API_CF_ACCESS_CLIENT_ID', ''),
+            'CF-Access-Client-Secret': os.environ.get('KOLAFI_API_CF_ACCESS_CLIENT_SECRET', ''),
+        }
 
     def pull(self):
         """回傳 None（沒有 PENDING 任務）或 { "taskId": ..., "payload": {...} }"""
         url = f"{self.base_url}/api/internal/tasks/{self.task_type}/pull"
         logger.debug("Pull %s: %s", self.task_type, url)
         try:
-            resp = requests.post(url, timeout=self.timeout_seconds)
+            resp = requests.post(url, headers=self.cf_access_headers, timeout=self.timeout_seconds)
             resp.raise_for_status()
             body = resp.json()
         except requests.RequestException as e:
@@ -54,7 +58,7 @@ class TaskApiClient:
         url = f"{self.base_url}/api/internal/tasks/{self.task_type}/{task_id}/ack"
         logger.debug("Ack %s task %s: %s", self.task_type, task_id, body)
         try:
-            resp = requests.post(url, json=body, timeout=self.timeout_seconds)
+            resp = requests.post(url, json=body, headers=self.cf_access_headers, timeout=self.timeout_seconds)
             resp.raise_for_status()
         except requests.RequestException as e:
             raise TaskApiError(f"呼叫 {self.task_type} Ack API 失敗: {e}") from e

@@ -47,7 +47,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!result.ok) {
       return jsonError(result.error, result.status)
     }
-    await notifyWorker(context.env.WORKER_NOTIFY_URL, 'EXPORT')
+    await notifyWorker(context.env.KOLAFI_WORKER_BASE_URL, 'EXPORT', { clientId: context.env.KOLAFI_WORKER_CF_ACCESS_CLIENT_ID, clientSecret: context.env.KOLAFI_WORKER_CF_ACCESS_CLIENT_SECRET })
     return jsonSuccess()
   } catch (err) {
     return jsonError(err instanceof Error ? err.message : String(err), 500)

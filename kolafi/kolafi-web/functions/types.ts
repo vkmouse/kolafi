@@ -10,12 +10,16 @@ export interface Env {
   S3_SECRET_ACCESS_KEY: string
   S3_BUCKET: string
   S3_FORCE_PATH_STYLE: string
+  S3_CF_ACCESS_CLIENT_ID: string
+  S3_CF_ACCESS_CLIENT_SECRET: string
   /**
    * kolafi-worker（合併後的地端 worker，coordinator 對外統一 port）的 base URL，
-   * 建立任務後用來打 best-effort 的 `POST {WORKER_NOTIFY_URL}/notify/<task_type>`。
+   * 建立任務後用來打 best-effort 的 `POST {KOLAFI_WORKER_BASE_URL}/notify/<task_type>`。
    * 正式環境下這裡應該是「反向代理」的入口，不是直接連地端 worker。
    */
-  WORKER_NOTIFY_URL: string
+  KOLAFI_WORKER_BASE_URL: string
+  KOLAFI_WORKER_CF_ACCESS_CLIENT_ID: string
+  KOLAFI_WORKER_CF_ACCESS_CLIENT_SECRET: string
 }
 
 // Auth
