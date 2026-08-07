@@ -4,16 +4,17 @@
  */
 
 import { getAuthHeaders } from './authService'
-import { getAccessHeaders } from './accessService'
+import { getAccessHeaders, recoverSession } from './accessService'
 
 const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
 }
 
 /**
- * 發送 HTTP 請求
+ * 401 時透過 accessService.recoverSession() 試著無感復原一次再重試，避免
+ * 單純 token 過期就整個請求失敗。isRetry 擋住只重試一次，避免無窮迴圈。
  */
-async function request(url, options = {}) {
+async function request(url, options = {}, isRetry = false) {
   const headers = {
     ...DEFAULT_HEADERS,
     ...getAccessHeaders(),
@@ -29,6 +30,14 @@ async function request(url, options = {}) {
 
   try {
     const response = await fetch(url, config)
+
+    if (response.status === 401 && !isRetry) {
+      const recovered = await recoverSession()
+      if (recovered) {
+        return request(url, options, true)
+      }
+    }
+
     const result = await response.json()
 
     if (!response.ok) {

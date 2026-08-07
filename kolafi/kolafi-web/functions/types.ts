@@ -20,11 +20,14 @@ export interface Env {
   KOLAFI_WORKER_BASE_URL: string
   KOLAFI_WORKER_CF_ACCESS_CLIENT_ID: string
   KOLAFI_WORKER_CF_ACCESS_CLIENT_SECRET: string
+  ACCESS_TEAM_DOMAIN?: string
+  ACCESS_AUD?: string
+  APP_JWT_SECRET?: string
 }
 
 // Auth
 
-/** 第 1 層使用者驗證通過後附加在 context 上的資訊 */
+/** 第 1 層使用者驗證通過後附加在 context 上的資訊（既有的 Authorization: Bearer <userId> 機制，不受下面的 Access session 影響） */
 export interface AuthContext {
   userId: string
 }

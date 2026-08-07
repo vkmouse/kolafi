@@ -1,23 +1,23 @@
 /**
- * Cloudflare Access（Service Token）前端驗證流程。
+ * Cloudflare Access 憑證 + App JWT session 維護。
  *
- * 正式環境下 /api/* 架在 Cloudflare Access 後面，Access edge 會在請求進到
- * kolafi-web 之前就先驗證 CF-Access-Client-Id / CF-Access-Client-Secret 這兩個
- * header，通過才放行，驗不過直接被 edge 擋掉（回 401/403）。
+ * /api/auth/login 打得通同時代表 Service Token 有效、也換到了
+ * access_token / refresh_token Cookie，所以拿它當驗證探測端點，不用再另外
+ * probe 業務端點。
  *
- * 因為驗證本身在 edge 完成，後端程式碼完全不用另外驗這組憑證；這個模組只負責
- * 「讓使用者輸入一次、存起來、之後每個 /api/* 請求自動帶上」。
- *
- * 刻意保持獨立（不依賴 authService.js、不依賴 httpClient.js），方便未來需要
- * 同一套「輸入 Client ID / Secret 換取存取」流程時，可以直接把這個檔案跟
- * AccessGate.vue 一起複製使用。
+ * isAuthenticated 是全域共享狀態，AccessGate.vue 跟 httpClient.js
+ * （401 復原失敗時）共用同一份，不用額外套件。
  */
+import { ref } from 'vue'
 
 const CLIENT_ID_KEY = 'cf_access_client_id'
 const CLIENT_SECRET_KEY = 'cf_access_client_secret'
 
-/** 用來試探憑證是否正確的端點；只要能通過 Access edge（不管業務邏輯回什麼）就代表憑證有效。 */
-const PROBE_URL = '/api/users'
+const LOGIN_URL = '/api/auth/login'
+const REFRESH_URL = '/api/auth/refresh'
+
+/** 全域共享的驗證狀態，AccessGate.vue 跟 httpClient.js 共用同一份。 */
+export const isAuthenticated = ref(false)
 
 /**
  * 從 localStorage 讀取憑證，兩個值都存在才視為有效，任一缺漏視為未設定。
@@ -57,15 +57,8 @@ export function getAccessHeaders() {
 }
 
 /**
- * 帶著指定憑證打一次 PROBE_URL，只用來確認「Cloudflare Access edge 認不認這組
- * Service Token」，不管業務邏輯回應的內容或狀態碼細節：
- * - 有回應（不管 200 或業務邏輯的錯誤碼）→ 代表有通過 Access edge → true
- * - 401 / 403 → Access edge 直接擋下 → false
- * - 網路錯誤 → false
- *
- * 不帶參數時讀 localStorage 裡已存的值（給 AccessGate 掛載時「用舊憑證重新
- * 確認一次」的情境用）；帶參數時直接用傳入的值打這次請求，不會去讀/寫
- * localStorage——留給「使用者剛輸入、還沒驗證過」的情境用。
+ * 不帶參數時用 localStorage 裡已存的憑證；帶參數時只拿去試打，不寫入
+ * localStorage，避免還沒驗證過的輸入被提早存下來。
  */
 export async function verifyAccessCredentials(credentials) {
   const creds = credentials ?? getStoredAccessCredentials()
@@ -75,7 +68,7 @@ export async function verifyAccessCredentials(credentials) {
 
   let response
   try {
-    response = await fetch(PROBE_URL, {
+    response = await fetch(LOGIN_URL, {
       method: 'GET',
       headers: {
         'CF-Access-Client-Id': creds.clientId,
@@ -87,5 +80,49 @@ export async function verifyAccessCredentials(credentials) {
     return false
   }
 
-  return response.status !== 401 && response.status !== 403
+  return response.ok
+}
+
+/** 給 recoverSession() 當第一層無感復原用。 */
+export async function refreshAccessToken() {
+  try {
+    const response = await fetch(REFRESH_URL, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+let recoveringPromise = null
+
+/**
+ * 401 時的復原流程：refresh_token 失敗才重新 /api/auth/login，兩層都失敗
+ * 才是真的登出，避免單純 access_token 過期就要使用者重新輸入憑證。
+ * recoveringPromise 避免同時間多個請求一起 401 時重複觸發。
+ */
+export function recoverSession() {
+  if (!recoveringPromise) {
+    recoveringPromise = (async () => {
+      const refreshed = await refreshAccessToken()
+      if (refreshed) {
+        isAuthenticated.value = true
+        return true
+      }
+
+      const relogged = await verifyAccessCredentials()
+      if (relogged) {
+        isAuthenticated.value = true
+        return true
+      }
+
+      isAuthenticated.value = false
+      return false
+    })().finally(() => {
+      recoveringPromise = null
+    })
+  }
+  return recoveringPromise
 }

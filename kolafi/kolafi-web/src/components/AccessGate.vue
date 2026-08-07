@@ -1,20 +1,14 @@
 <!--
-  Cloudflare Access（Service Token）驗證閘門。
+  Cloudflare Access 驗證閘門：沒驗證過就顯示 Client ID/Secret 輸入畫面，
+  通過才顯示 slot 內容並發出 `authenticated` 事件。
 
-  用法：把要保護的內容放進預設 slot，掛載時會自動檢查 localStorage 裡有沒有
-  存憑證、帶著憑證打一次 /api/users 試探：
-    - 通過（不管業務邏輯回什麼，只要不是 401/403）→ 顯示 slot 內容，並發出
-      `authenticated` 事件（父層可以藉此知道「現在才可以開始打其他 API」）
-    - 沒存值，或被 Access edge 擋下（401/403）、網路錯誤等 → 顯示輸入畫面 +
-      錯誤訊息，唯一能做的動作就是「重新輸入一次」
-
-  後端完全不驗證這組憑證——正式環境靠 Cloudflare Access edge 在請求進到
-  kolafi-web 之前就先擋掉，所以「試探成功」只代表 edge 認得這組 Service
-  Token，不代表任何業務邏輯上的意義。
+  isAuthenticated 是 accessService.js 的全域共享狀態，httpClient.js 判定
+  session 真的復原不了時也會把它設回 false，這裡會自動切回輸入畫面。
 -->
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import {
+  isAuthenticated,
   getStoredAccessCredentials,
   storeAccessCredentials,
   verifyAccessCredentials,
@@ -22,8 +16,6 @@ import {
 
 const emit = defineEmits(['authenticated'])
 
-/** 是否已經通過驗證、可以顯示 slot 內容。 */
-const authenticated = ref(false)
 /** 掛載時的第一次驗證是否還在進行中（跟送出表單後的 submitting 分開，避免畫面互相干擾）。 */
 const checking = ref(true)
 const errorMessage = ref('')
@@ -43,7 +35,7 @@ async function check() {
   checking.value = false
 
   if (ok) {
-    authenticated.value = true
+    isAuthenticated.value = true
     emit('authenticated')
   } else {
     errorMessage.value = '驗證失敗，請確認 Client ID / Secret 是否正確'
@@ -67,7 +59,7 @@ async function handleSubmit() {
 
   if (ok) {
     storeAccessCredentials(credentials)
-    authenticated.value = true
+    isAuthenticated.value = true
     emit('authenticated')
   } else {
     errorMessage.value = '驗證失敗，請確認 Client ID / Secret 是否正確'
@@ -75,13 +67,20 @@ async function handleSubmit() {
   submitting.value = false
 }
 
+/** isAuthenticated 被 httpClient 設回 false 時，補一句提示文字說明原因。 */
+watch(isAuthenticated, (nowAuthenticated) => {
+  if (!nowAuthenticated && !checking.value) {
+    errorMessage.value = '登入狀態已過期，請重新輸入 Client ID / Secret'
+  }
+})
+
 onMounted(() => {
   check()
 })
 </script>
 
 <template>
-  <slot v-if="authenticated" />
+  <slot v-if="isAuthenticated" />
 
   <div v-else class="access-gate">
     <div class="access-gate__box">
