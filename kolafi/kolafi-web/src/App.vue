@@ -1,16 +1,34 @@
 <script setup>
 import Navigation from './components/Navigation.vue'
+import AccessGate from './components/AccessGate.vue'
+import { initializeAuth } from './services/authService'
+
+/**
+ * AccessGate 驗證通過才會觸發（不管是掛載時用舊憑證驗證成功，還是使用者
+ * 剛手動輸入成功）。main.js 掛載 app 前也會呼叫一次 initializeAuth，但那次
+ * 如果還沒輸入憑證會在正式環境被 Access edge 擋掉而失敗（main.js 會吞掉
+ * 錯誤照樣掛載），所以這裡驗證通過後要再呼叫一次，確保使用者清單真的抓得到。
+ */
+async function handleAuthenticated() {
+  try {
+    await initializeAuth()
+  } catch (error) {
+    console.error('驗證通過後重新初始化認證失敗:', error)
+  }
+}
 </script>
 
 <template>
-  <div class="app">
-    <Navigation />
-    <main class="content">
-      <router-view v-slot="{ Component }">
-        <component :is="Component" />
-      </router-view>
-    </main>
-  </div>
+  <AccessGate @authenticated="handleAuthenticated">
+    <div class="app">
+      <Navigation />
+      <main class="content">
+        <router-view v-slot="{ Component }">
+          <component :is="Component" />
+        </router-view>
+      </main>
+    </div>
+  </AccessGate>
 </template>
 
 <style>

@@ -3,6 +3,8 @@
  * 處理用戶認證相關邏輯
  */
 
+import { getAccessHeaders } from './accessService'
+
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'current_user'
 
@@ -15,7 +17,9 @@ export async function fetchUsers() {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-      }
+        ...getAccessHeaders(),
+      },
+      credentials: 'include'
     })
     
     const result = await response.json()

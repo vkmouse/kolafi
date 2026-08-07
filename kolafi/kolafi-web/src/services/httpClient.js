@@ -4,6 +4,7 @@
  */
 
 import { getAuthHeaders } from './authService'
+import { getAccessHeaders } from './accessService'
 
 const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
@@ -15,6 +16,7 @@ const DEFAULT_HEADERS = {
 async function request(url, options = {}) {
   const headers = {
     ...DEFAULT_HEADERS,
+    ...getAccessHeaders(),
     ...getAuthHeaders(),
     ...options.headers
   }
