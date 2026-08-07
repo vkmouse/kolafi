@@ -38,14 +38,6 @@ export async function signRefreshToken(secret: string): Promise<string> {
   return signAppToken(secret, 'refresh', REFRESH_TOKEN_TTL_SECONDS)
 }
 
-// DEBUG: 原本只回傳 boolean，catch 裡把真正的失敗原因吃掉了（簽章不符／過期／
-// type 不對全部混在一起變成 false）。改成回傳 { ok, reason } 讓呼叫端可以印出
-// 實際原因，上線前可以視情況改回單純的 boolean。
-export interface AppTokenVerifyResult {
-  ok: boolean
-  reason?: string
-}
-
 /**
  * 驗證簽章／效期，並確認 payload 的 `type` 跟預期一致，避免把 refresh token
  * 塞進 access_token cookie 蒙混過關。
@@ -54,19 +46,11 @@ export async function verifyAppToken(
   secret: string,
   token: string,
   expectedType: AppTokenType,
-): Promise<AppTokenVerifyResult> {
+): Promise<boolean> {
   try {
     const { payload } = await jwtVerify(token, encodeSecret(secret))
-    if (payload.type !== expectedType) {
-      return {
-        ok: false,
-        reason: `token type 不符：預期 "${expectedType}"，實際 "${String(payload.type)}"`,
-      }
-    }
-    return { ok: true }
-  } catch (err) {
-    const name = err instanceof Error ? err.name : typeof err
-    const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, reason: `${name}: ${message}` }
+    return payload.type === expectedType
+  } catch {
+    return false
   }
 }
