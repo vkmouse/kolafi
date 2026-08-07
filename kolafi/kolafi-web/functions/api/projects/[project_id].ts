@@ -1,11 +1,11 @@
 import type { Env } from '../../types'
-import { authenticateUser, authenticateProjectAccess } from '../../middleware/authMiddleware'
+import { resolveActingUser, authenticateProjectAccess } from '../../middleware/actorContext'
 import { deleteProject, getProjectDetail } from '../../services/projectService'
 import { jsonError, jsonOk } from '../../utils/http'
 
 /** GET /api/projects/:project_id — 專案詳情，含目前使用者對此專案的狀態、文案與素材清單 */
 export const onRequestGet: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)
@@ -27,7 +27,7 @@ export const onRequestGet: PagesFunction<Env, 'project_id'> = async (context) =>
  * 縮圖、匯出檔，以及資料庫中所有關聯資料
  */
 export const onRequestDelete: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)

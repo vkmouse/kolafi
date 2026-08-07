@@ -75,7 +75,7 @@ export async function initializeAuth() {
 }
 
 /**
- * 獲取當前的認證文件（用於 Authorization header）
+ * 獲取目前選定的 userId
  */
 export function getAuthToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -90,7 +90,7 @@ export function getCurrentUser() {
 }
 
 /**
- * 取得授權 header 物件
+ * 取得標記操作歸屬用的 header 物件（X-User-Id，不是身分驗證）
  */
 export function getAuthHeaders() {
   const token = getAuthToken()
@@ -98,7 +98,7 @@ export function getAuthHeaders() {
     return {}
   }
   return {
-    'Authorization': `Bearer ${token}`
+    'X-User-Id': token
   }
 }
 

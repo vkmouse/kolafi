@@ -1,11 +1,11 @@
 import type { Env, CreateProjectBody } from '../types'
-import { authenticateUser } from '../middleware/authMiddleware'
+import { resolveActingUser } from '../middleware/actorContext'
 import { createProject, getProjectList, parseListProjectsQuery } from '../services/projectService'
 import { jsonError, jsonOk, jsonOkPaginated } from '../utils/http'
 
 /** GET /api/projects — 取得目前使用者的專案清單（分頁、可篩選、可搜尋） */
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const url = new URL(context.request.url)
@@ -21,7 +21,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
 /** POST /api/projects — 建立新專案，並自動與所有使用者建立 user_projects 關聯 */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
   // auth.userId 刻意不用在後續寫入邏輯：新建立的專案會跟系統內所有使用者建立關聯，不只發出請求的這位
 

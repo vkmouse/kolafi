@@ -1,11 +1,11 @@
 import type { Env, SelectProjectAssetsBody } from '../../../../types'
-import { authenticateUser, authenticateProjectAccess } from '../../../../middleware/authMiddleware'
+import { resolveActingUser, authenticateProjectAccess } from '../../../../middleware/actorContext'
 import { selectProjectAssets } from '../../../../services/projectAssetService'
 import { jsonError, jsonOk } from '../../../../utils/http'
 
 /** PUT /api/projects/:project_id/assets/select — 整批覆蓋專案已選定、排序後的素材清單 */
 export const onRequestPut: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)

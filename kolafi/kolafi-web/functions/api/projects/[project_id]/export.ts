@@ -1,5 +1,5 @@
 import type { Env, UpdateProjectExportBody } from '../../../types'
-import { authenticateUser, authenticateProjectAccess } from '../../../middleware/authMiddleware'
+import { resolveActingUser, authenticateProjectAccess } from '../../../middleware/actorContext'
 import { updateProjectExport } from '../../../services/projectService'
 import { jsonError, jsonOk } from '../../../utils/http'
 
@@ -8,7 +8,7 @@ import { jsonError, jsonOk } from '../../../utils/http'
  * 若請求中帶了 asset_ids 則另外整批覆蓋最終選定清單。所有欄位皆為可選、部分更新語意。
  */
 export const onRequestPut: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)

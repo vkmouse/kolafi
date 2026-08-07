@@ -5,7 +5,7 @@ import { pullExportTask } from '../../../../services/taskService'
 /**
  * POST /api/internal/tasks/export/pull
  *
- * 內部 API，供地端 EXPORT Worker 呼叫，不套用 Bearer 使用者驗證（Zero Trust 設定尚未導入）。
+ * 內部 API，供地端 EXPORT Worker 呼叫，不套用 X-User-Id 操作歸屬標記（Zero Trust 設定尚未導入）。
  *
  * 回應信封：
  *   有任務：{ success: true, data: { taskId, payload: { projectId, caption, exportParams, assets,

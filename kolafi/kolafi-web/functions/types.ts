@@ -27,8 +27,8 @@ export interface Env {
 
 // Auth
 
-/** 第 1 層使用者驗證通過後附加在 context 上的資訊（既有的 Authorization: Bearer <userId> 機制，不受下面的 Access session 影響） */
-export interface AuthContext {
+/** 標記這次操作算誰的，不是身分驗證 */
+export interface ActingUserContext {
   userId: string
 }
 

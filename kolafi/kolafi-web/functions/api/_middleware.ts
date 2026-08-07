@@ -5,8 +5,7 @@
  * 用 Service Token 直打 Access edge 的另一條路徑，邊界防護在 edge，也跳過。
  * 其餘一律驗 access_token Cookie 的 App JWT，驗不過回 401。
  *
- * 這裡只確認「瀏覽器有沒有通過 Cloudflare Access」，跟驗證使用者能不能存取
- * 特定資源的 functions/middleware/authMiddleware.ts 是兩件事，互不影響。
+ * 這裡只確認「瀏覽器有沒有通過 Cloudflare Access」，操作歸屬是另一層的事，互不影響。
  */
 import type { Env } from '../types'
 import { verifyAppToken } from '../utils/jwt'

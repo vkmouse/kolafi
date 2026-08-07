@@ -1,5 +1,5 @@
 import type { CreateExportTaskBody, Env } from '../../types'
-import { authenticateUser } from '../../middleware/authMiddleware'
+import { resolveActingUser } from '../../middleware/actorContext'
 import { listExportTasks, createExportTask } from '../../services/taskListService'
 import { notifyWorker } from '../../services/notifyService'
 import { jsonError, jsonOk, jsonSuccess } from '../../utils/http'
@@ -10,7 +10,7 @@ import { isNonEmptyString } from '../../utils/validators'
  * project_id 是 query 參數而非路徑參數，不觸發第 2 層專案存取驗證。
  */
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectId = new URL(context.request.url).searchParams.get('project_id')
@@ -28,7 +28,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
 /** POST /api/tasks/export — 為目前使用者、指定專案建立一筆 EXPORT 任務，需要第 1 層使用者驗證 */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   let body: CreateExportTaskBody

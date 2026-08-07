@@ -1,12 +1,12 @@
 import type { CreateProjectTagBody, Env } from '../../../types'
-import { authenticateUser, authenticateProjectAccess } from '../../../middleware/authMiddleware'
+import { resolveActingUser, authenticateProjectAccess } from '../../../middleware/actorContext'
 import { createProjectTag, getProjectTagList } from '../../../services/projectTagService'
 import { jsonError, jsonOk } from '../../../utils/http'
 import { isNonEmptyString } from '../../../utils/validators'
 
 /** GET /api/projects/:project_id/tags — 取得指定專案的標籤清單 */
 export const onRequestGet: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)
@@ -22,7 +22,7 @@ export const onRequestGet: PagesFunction<Env, 'project_id'> = async (context) =>
 
 /** POST /api/projects/:project_id/tags — 於指定專案新增標籤 */
 export const onRequestPost: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)

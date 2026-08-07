@@ -17,7 +17,7 @@ function toStringArray(value: unknown): string[] {
 /**
  * POST /api/internal/tasks/cleanup/:task_id/ack
  *
- * 內部 API，供地端 CLEANUP Worker 呼叫，不套用 Bearer 使用者驗證（Zero Trust 設定尚未導入）。
+ * 內部 API，供地端 CLEANUP Worker 呼叫，不套用 X-User-Id 操作歸屬標記（Zero Trust 設定尚未導入）。
  *
  * 接受兩種 body 格式：
  *   業務成功（含全部失敗）：{ status: "SUCCESS", cleanedAssetIds: [...], failedAssetIds: [...] }

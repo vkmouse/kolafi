@@ -1,12 +1,12 @@
 import type { Env } from '../../../../types'
-import { authenticateUser, authenticateProjectAccess } from '../../../../middleware/authMiddleware'
+import { resolveActingUser, authenticateProjectAccess } from '../../../../middleware/actorContext'
 import { uploadAssetToProject } from '../../../../services/projectAssetService'
 import { notifyWorker } from '../../../../services/notifyService'
 import { jsonError, jsonOk } from '../../../../utils/http'
 
 /** POST /api/projects/:project_id/assets/upload — 直接上傳新檔案並建立為專案素材（multipart/form-data，欄位 file） */
 export const onRequestPost: PagesFunction<Env, 'project_id'> = async (context) => {
-  const auth = await authenticateUser(context.request, context.env.DB)
+  const auth = await resolveActingUser(context.request, context.env.DB)
   if (!auth.ok) return auth.response
 
   const projectAuth = await authenticateProjectAccess(String(context.params.project_id), auth.userId, context.env.DB)
