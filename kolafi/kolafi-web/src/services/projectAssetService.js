@@ -53,6 +53,7 @@ export async function updateProjectAssets(projectId, assetIds) {
 export async function uploadAssetToProject(projectId, file, onProgress) {
   try {
     const { getAuthHeaders } = await import('./authService')
+    const { getAccessHeaders } = await import('./accessService')
     const formData = new FormData()
     formData.append('file', file)
 
@@ -97,7 +98,7 @@ export async function uploadAssetToProject(projectId, file, onProgress) {
       })
 
       xhr.open('POST', `/api/projects/${projectId}/assets/upload`)
-      const headers = getAuthHeaders()
+      const headers = { ...getAccessHeaders(), ...getAuthHeaders() }
       Object.entries(headers).forEach(([key, value]) => {
         xhr.setRequestHeader(key, value)
       })

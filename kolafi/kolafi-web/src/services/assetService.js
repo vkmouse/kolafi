@@ -5,6 +5,7 @@
 
 import { get, post, del } from './httpClient'
 import { getAuthHeaders } from './authService'
+import { getAccessHeaders } from './accessService'
 
 /**
  * 獲取所有素材列表
@@ -79,7 +80,7 @@ export async function uploadAsset(file, onProgress) {
       })
 
       xhr.open('POST', '/api/assets/upload')
-      const headers = getAuthHeaders()
+      const headers = { ...getAccessHeaders(), ...getAuthHeaders() }
       Object.entries(headers).forEach(([key, value]) => {
         xhr.setRequestHeader(key, value)
       })
