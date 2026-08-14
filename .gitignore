@@ -30,6 +30,8 @@
 # 只放行 worker 的 Python 原始碼；目錄僅用來讓 Git 找到這些檔案
 !/kolafi/kolafi-worker/
 /kolafi/kolafi-worker/**
+!/kolafi/kolafi-worker/Dockerfile
+!/kolafi/kolafi-worker/requirements.txt
 !/kolafi/kolafi-worker/caption/
 !/kolafi/kolafi-worker/cleanup/
 !/kolafi/kolafi-worker/download/

@@ -1,0 +1,21 @@
+# 框架層套件（shared/worker_framework.py、shared/task_api_client.py、main.py 需要）
+Flask==3.0.3
+requests==2.32.3
+
+# THUMBNAIL / EXPORT 需要：圖片與影片處理
+Pillow==10.1.0
+moviepy==1.0.3
+ffmpeg-python
+numpy<2.0.0
+
+# EXPORT 需要：文字轉語音
+edge-tts>=6.1.9
+
+# THUMBNAIL / CLEANUP / EXPORT / DOWNLOAD 需要：物件儲存（shared/s3_client.py）
+boto3==1.35.36
+
+# TAG 需要：中文分詞與詞頻統計（tag/keyword_analyzer.py）
+jieba==0.42.1
+
+# 六份 requirements.txt 之間版本號沒有衝突，去重合併如上；
+# CAPTION 沒有額外套件（讀本機檔案 + 打 Gemini REST API，標準函式庫 + requests 就夠）。
