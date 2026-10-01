@@ -1,6 +1,7 @@
 # 白名單模式：先忽略全部，再放行指定路徑
 /*
 !/.gitignore
+!/.gitattributes
 !/kolafi/
 
 /kolafi/*

@@ -1,0 +1,2 @@
+# 統一以 LF 儲存，避免 Windows 工作目錄的 CRLF 讓 git diff 整檔變動
+* text=auto eol=lf
