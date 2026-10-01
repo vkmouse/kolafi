@@ -12,6 +12,8 @@ numpy<2.0.0
 edge-tts>=6.1.9
 
 # THUMBNAIL / CLEANUP / EXPORT / DOWNLOAD 需要：物件儲存（shared/s3_client.py）
+# 刻意釘在 1.35.x：boto3 1.36+ 預設會附 CRC32 checksum，R2 不相容；
+# 若要升級，需在 BotoConfig 加 request_checksum_calculation='when_required'、response_checksum_validation='when_required'
 boto3==1.35.36
 
 # TAG 需要：中文分詞與詞頻統計（tag/keyword_analyzer.py）

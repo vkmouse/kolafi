@@ -1,7 +1,7 @@
 export interface Env {
   DB: D1Database
   /**
-   * 物件儲存（S3 相容 API，實際部署可能是 MinIO）連線設定：
+   * 物件儲存（Cloudflare R2 的 S3 相容 API）連線設定：
    * 單一 bucket，內部以 assets/、thumbs/、exports/ prefix 區分用途。
    */
   S3_ENDPOINT: string
@@ -10,8 +10,6 @@ export interface Env {
   S3_SECRET_ACCESS_KEY: string
   S3_BUCKET: string
   S3_FORCE_PATH_STYLE: string
-  S3_CF_ACCESS_CLIENT_ID: string
-  S3_CF_ACCESS_CLIENT_SECRET: string
   /**
    * kolafi-worker（合併後的地端 worker，coordinator 對外統一 port）的 base URL，
    * 建立任務後用來打 best-effort 的 `POST {KOLAFI_WORKER_BASE_URL}/notify/<task_type>`。

@@ -1,5 +1,5 @@
 """
-物件儲存（S3 相容，實際部署為 MinIO）存取層。合併自 thumbnail/cleanup/export/download
+物件儲存（Cloudflare R2，S3 相容 API）存取層。合併自 thumbnail/cleanup/export/download
 四個 worker 原本各自的 s3_client.py（caption、tag 這兩種任務類型不碰物件儲存，沒有對應內容）。
 
 Key 規則：
@@ -19,26 +19,21 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
-S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'http://localhost:9000')
-S3_REGION = os.environ.get('S3_REGION', 'us-east-1')
+S3_ENDPOINT = os.environ.get('S3_ENDPOINT', '')
+S3_REGION = os.environ.get('S3_REGION', 'auto')
 S3_ACCESS_KEY_ID = os.environ.get('S3_ACCESS_KEY_ID', '')
 S3_SECRET_ACCESS_KEY = os.environ.get('S3_SECRET_ACCESS_KEY', '')
 S3_BUCKET = os.environ.get('S3_BUCKET', 'kolafi')
 S3_FORCE_PATH_STYLE = os.environ.get('S3_FORCE_PATH_STYLE', 'true') == 'true'
-S3_CF_ACCESS_CLIENT_ID = os.environ.get('S3_CF_ACCESS_CLIENT_ID', '')
-S3_CF_ACCESS_CLIENT_SECRET = os.environ.get('S3_CF_ACCESS_CLIENT_SECRET', '')
 
 _client = None
-
-
-def _add_cf_access_headers(request, **kwargs):
-    request.headers['CF-Access-Client-Id'] = S3_CF_ACCESS_CLIENT_ID
-    request.headers['CF-Access-Client-Secret'] = S3_CF_ACCESS_CLIENT_SECRET
 
 
 def get_s3_client():
     global _client
     if _client is None:
+        if not S3_ENDPOINT or not S3_ACCESS_KEY_ID or not S3_SECRET_ACCESS_KEY:
+            raise RuntimeError('物件儲存未設定：需要 S3_ENDPOINT、S3_ACCESS_KEY_ID、S3_SECRET_ACCESS_KEY')
         logger.debug("初始化 S3 client，endpoint=%s bucket=%s", S3_ENDPOINT, S3_BUCKET)
         _client = boto3.client(
             's3',
@@ -50,8 +45,6 @@ def get_s3_client():
                 s3={'addressing_style': 'path' if S3_FORCE_PATH_STYLE else 'auto'}
             ),
         )
-        # 不論有沒有值都直接帶，本地環境不會驗證這個 header
-        _client.meta.events.register('before-sign.s3', _add_cf_access_headers)
     return _client
 
 

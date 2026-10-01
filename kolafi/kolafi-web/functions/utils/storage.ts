@@ -2,7 +2,7 @@ import { AwsClient } from 'aws4fetch'
 import type { Env } from '../types'
 
 /**
- * 物件儲存存取層，S3 相容 API（實際部署可能是 MinIO），連線參數一律讀環境變數：
+ * 物件儲存存取層，使用 Cloudflare R2 的 S3 相容 API，連線參數一律讀環境變數：
  *
  *   assets/{source_id}/{asset_id}{extension}   原始素材檔
  *   thumbs/{source_id}/{asset_id}.jpg          縮圖
@@ -20,21 +20,21 @@ export interface S3Config {
   secretAccessKey: string
   bucket: string
   forcePathStyle: boolean
-  cfAccessClientId: string
-  cfAccessClientSecret: string
 }
 
-/** 讀取 S3 連線設定，各欄位皆有預設值 */
+/** 讀取 R2 連線設定；endpoint 與金鑰沒設定時直接報錯，避免悄悄連到錯的位置 */
 export function getS3Config(env: Env): S3Config {
+  if (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {
+    throw new Error('物件儲存未設定：需要 S3_ENDPOINT、S3_ACCESS_KEY_ID、S3_SECRET_ACCESS_KEY')
+  }
+
   return {
-    endpoint: env.S3_ENDPOINT || 'http://localhost:9000',
-    region: env.S3_REGION || 'us-east-1',
-    accessKeyId: env.S3_ACCESS_KEY_ID || '',
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY || '',
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION || 'auto',
+    accessKeyId: env.S3_ACCESS_KEY_ID,
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     bucket: env.S3_BUCKET || 'kolafi',
     forcePathStyle: (env.S3_FORCE_PATH_STYLE || 'true') === 'true',
-    cfAccessClientId: env.S3_CF_ACCESS_CLIENT_ID || '',
-    cfAccessClientSecret: env.S3_CF_ACCESS_CLIENT_SECRET || '',
   }
 }
 
@@ -47,32 +47,17 @@ function createS3Client(config: S3Config): AwsClient {
   })
 }
 
-/**
- * 對 S3 相容端點送出請求。CF-Access-Client-Id/Secret 是 Cloudflare Access 邊緣層的認證，
- * 跟 S3 的 SigV4 簽章是兩套獨立機制，不能混在一起簽名：
- * 若先把這兩個 header 交給 client.fetch()，aws4fetch 預設會把它們一併納入 SignedHeaders
- * （它的 UNSIGNABLE_HEADERS 白名單只排除 authorization/content-type/content-length/
- * user-agent/presigned-expires/expect/x-amzn-trace-id/range/connection，不含自訂 header）。
- * 一旦簽章當下看到的 header 值跟 MinIO 實際收到的有任何落差，SigV4 驗證就會失敗。
- * 因此改用 client.sign() 只簽 S3 需要的部分，簽完名之後才把 CF Access header set 上去，
- * 讓它們仍會送出，但不會進入簽章計算範圍。
- */
+/** 對 R2 的 S3 相容端點送出 SigV4 簽章過的請求 */
 async function s3Fetch(
   client: AwsClient,
-  config: S3Config,
   url: string,
   init: { method: string; headers?: Record<string, string>; body?: BodyInit },
 ): Promise<Response> {
-  const signedRequest = await client.sign(url, {
+  return client.fetch(url, {
     method: init.method,
     headers: init.headers,
     body: init.body,
   })
-
-  if (config.cfAccessClientId) signedRequest.headers.set('CF-Access-Client-Id', config.cfAccessClientId)
-  if (config.cfAccessClientSecret) signedRequest.headers.set('CF-Access-Client-Secret', config.cfAccessClientSecret)
-
-  return fetch(signedRequest)
 }
 
 /** 組出 bucket 根目錄的 URL，依 forcePathStyle 決定 path-style 或 virtual-hosted-style */
@@ -127,7 +112,7 @@ export async function putObject(env: Env, key: string, body: Blob | ArrayBuffer,
   const base = bucketBaseUrl(config)
   const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
 
-  const res = await s3Fetch(client, config, url, {
+  const res = await s3Fetch(client, url, {
     method: 'PUT',
     body,
     headers: contentType ? { 'Content-Type': contentType } : undefined,
@@ -154,7 +139,7 @@ export async function getObject(env: Env, key: string): Promise<StoredObject | n
   const base = bucketBaseUrl(config)
   const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
 
-  const res = await s3Fetch(client, config, url, { method: 'GET' })
+  const res = await s3Fetch(client, url, { method: 'GET' })
 
   if (res.status === 404) return null
   if (!res.ok || !res.body) {
@@ -172,7 +157,7 @@ export async function deleteObject(env: Env, key: string): Promise<void> {
   const base = bucketBaseUrl(config)
   const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
 
-  const res = await s3Fetch(client, config, url, { method: 'DELETE' })
+  const res = await s3Fetch(client, url, { method: 'DELETE' })
   if (!res.ok && res.status !== 404) {
     const detail = await res.text().catch(() => '')
     throw new Error(`刪除物件失敗 key=${key}: HTTP ${res.status} ${detail.slice(0, 300)}`)
@@ -213,7 +198,7 @@ async function listAllKeys(client: AwsClient, config: S3Config, prefix: string):
       listUrl.searchParams.set('continuation-token', continuationToken)
     }
 
-    const res = await s3Fetch(client, config, listUrl.toString(), { method: 'GET' })
+    const res = await s3Fetch(client, listUrl.toString(), { method: 'GET' })
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       throw new Error(`列出物件失敗 prefix=${prefix}: HTTP ${res.status} ${detail.slice(0, 300)}`)
@@ -239,7 +224,7 @@ async function deleteKeys(client: AwsClient, config: S3Config, keys: string[]): 
     const results = await Promise.all(
       batch.map(async (key) => {
         const url = `${base}/${key.split('/').map(encodeURIComponent).join('/')}`
-        const res = await s3Fetch(client, config, url, { method: 'DELETE' })
+        const res = await s3Fetch(client, url, { method: 'DELETE' })
         return { key, ok: res.ok || res.status === 404 }
       }),
     )
