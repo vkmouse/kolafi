@@ -1,15 +1,10 @@
 export interface Env {
   DB: D1Database
   /**
-   * 物件儲存（Cloudflare R2 的 S3 相容 API）連線設定：
-   * 單一 bucket，內部以 assets/、thumbs/、exports/ prefix 區分用途。
+   * 物件儲存（Cloudflare R2 binding）：單一 bucket，內部以 assets/、thumbs/、exports/ prefix 區分用途。
+   * 需在 Pages 專案設定 R2 bucket binding，變數名稱必須是 `BUCKET`。
    */
-  S3_ENDPOINT: string
-  S3_REGION: string
-  S3_ACCESS_KEY_ID: string
-  S3_SECRET_ACCESS_KEY: string
-  S3_BUCKET: string
-  S3_FORCE_PATH_STYLE: string
+  BUCKET: R2Bucket
   /**
    * kolafi-worker（合併後的地端 worker，coordinator 對外統一 port）的 base URL，
    * 建立任務後用來打 best-effort 的 `POST {KOLAFI_WORKER_BASE_URL}/notify/<task_type>`。
