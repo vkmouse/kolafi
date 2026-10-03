@@ -12,7 +12,7 @@ sys.path、跑在同一個 process 裡，兩個同名但內容不同的模組會
 """
 import os
 import time
-from typing import List
+from typing import List, Optional
 from urllib.parse import urlparse
 
 from logger import get_logger
@@ -26,6 +26,14 @@ CANDIDATE_MULTIPLIER = 3
 # 換頁後、點縮圖後固定等待的秒數
 PAGE_LOAD_WAIT_SECONDS = 5
 CLICK_PREVIEW_WAIT_SECONDS = 3
+
+# 點擊縮圖後，大圖預覽區塊裡的 <img> selector，依序嘗試，找到可用網址就停。
+# Google 會不定期換 class，所以第一組放已知的大圖 class / jsname，
+# 第二組是 fallback：直接抓預覽面板內所有 http 圖片，再靠 _is_original_url 過濾。
+LARGE_IMAGE_SELECTORS = (
+    'img.n3VNCb, img.sFlh5c, img.iPVvYb, img[jsname="HiaYvf"], img[jsname="kn3ccd"]',
+    'div[role="dialog"] img[src^="http"], #Sva75c img[src^="http"]',
+)
 
 
 def search_google_images(client: WebSandboxClient, session_id: str, query: str) -> List[str]:
@@ -51,29 +59,59 @@ def search_google_images(client: WebSandboxClient, session_id: str, query: str) 
     return images
 
 
+def _is_original_url(src: Optional[str], thumb_src: Optional[str], collected: List[str]) -> bool:
+    """判斷這個 src 是不是可以拿去下載的原始圖網址。
+
+    排除：空值、非 http 開頭（含 data: URI）、Google 縮圖網域（gstatic.com）、
+    Google 自家網域（google.com，如 favicon / 內部頁面）、跟被點的縮圖同一張、已收集過的重複網址。
+    """
+    if not src or not src.startswith('http'):
+        return False
+    if 'gstatic.com' in src:
+        return False
+    host = urlparse(src).netloc.lower()
+    if host == 'google.com' or host.endswith('.google.com'):
+        return False
+    if src == thumb_src or src in collected:
+        return False
+    return True
+
+
+def _find_original_url(client: WebSandboxClient, session_id: str, thumb_src: Optional[str], collected: List[str]) -> Optional[str]:
+    """在已點開的預覽區塊找第一個可下載的原始圖網址，找不到回傳 None。"""
+    for selector in LARGE_IMAGE_SELECTORS:
+        large_image_ids = client.find_elements(session_id, selector)
+        logger.info('大圖 selector「%s」找到 %d 個元素', selector, len(large_image_ids))
+
+        for large_img_id in large_image_ids:
+            src = client.get_attribute(session_id, large_img_id, 'src')
+            if _is_original_url(src, thumb_src, collected):
+                return src
+    return None
+
+
 def collect_original_image_urls(client: WebSandboxClient, session_id: str, images: List[str], target_count: int) -> List[str]:
     """依序點擊縮圖觸發大圖預覽，取出原始圖網址，收集到 target_count 個就提前停止。
 
-    略過 gstatic.com（縮圖網域）、非 http 開頭、或已收集過的重複網址；
-    每張縮圖最多取一個有效網址。
+    每張縮圖最多取一個有效網址，判斷規則見 _is_original_url。
     """
     image_urls: List[str] = []
     candidates = images[: target_count * CANDIDATE_MULTIPLIER]
 
-    for img_id in candidates:
+    for index, img_id in enumerate(candidates, 1):
         try:
+            thumb_src = client.get_attribute(session_id, img_id, 'src')
+
             client.click_element(session_id, img_id)
             time.sleep(CLICK_PREVIEW_WAIT_SECONDS)
-            large_image_ids = client.find_elements(session_id, 'img.n3VNCb, img.sFlh5c')
 
-            for large_img_id in large_image_ids:
-                src = client.get_attribute(session_id, large_img_id, 'src')
+            src = _find_original_url(client, session_id, thumb_src, image_urls)
+            if src is None:
+                logger.info('第 %d/%d 張點擊後找不到可用大圖，略過', index, len(candidates))
+                continue
 
-                if src and 'gstatic.com' in src:
-                    continue
-                if src and src.startswith('http') and src not in image_urls:
-                    image_urls.append(src)
-                    break
+            image_urls.append(src)
+            logger.info('第 %d/%d 張取得原始圖網址（目前共 %d 張）: %s', index, len(candidates), len(image_urls), src[:80])
 
             if len(image_urls) >= target_count:
                 break
