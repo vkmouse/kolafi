@@ -4,13 +4,12 @@ import {
   deleteAssetById,
   getAssetCoreById,
   getAssetStats as getAssetStatsRow,
-  getAssetThumbnailInfo,
   insertAssetWithThumbnailTask,
   listAssets,
   type AssetCoreRow,
   type AssetListRow,
 } from '../repositories/assetRepository'
-import { assetKey, deleteObject, getObject, putObject, thumbnailKey } from '../utils/storage'
+import { assetKey, deleteObject, getObject, putObject } from '../utils/storage'
 import { mimeTypeByExtension } from '../utils/mime'
 import { extractExtension, parseAssetFilter, parsePositiveIntParam, resolveAssetType, type AssetFilter } from '../utils/validators'
 
@@ -146,22 +145,56 @@ export async function getAssetFile(assetId: string, DB: D1Database, env: Env): P
   return { ok: true, body: object.body, contentType: mimeTypeByExtension(core.extension) }
 }
 
-/** 讀取前需先確認縮圖已產生完成，未完成視為找不到 */
+/** 縮圖規格沿用舊版地端 worker：長邊 ≤ 320、不放大、JPEG 品質 85、影片取 0.5 秒處的畫面 */
+const THUMBNAIL_MAX_SIDE = 320
+const THUMBNAIL_QUALITY = 85
+const VIDEO_FRAME_TIME = '0.5s'
+
+/**
+ * 即時產生縮圖：從 R2 讀原始檔，圖片交給 Cloudflare Images binding、影片交給 Media Transformations binding
+ * 轉成 JPEG 後直接回傳。不讀也不寫 R2 的縮圖物件（thumbs/），也不看 has_thumbnail。
+ *
+ * 需要的 binding：BUCKET（R2，原本就有）、IMAGES、MEDIA。
+ * 沒綁定時直接報錯並指出缺哪一個，避免悄悄失敗。
+ */
 export async function getAssetThumbnail(assetId: string, DB: D1Database, env: Env): Promise<AssetFileResult> {
-  const info = await getAssetThumbnailInfo(assetId, DB)
-  if (!info) {
+  const core = await getAssetCoreById(assetId, DB)
+  if (!core) {
     return { ok: false, error: '素材不存在', status: 404 }
   }
 
-  if (info.has_thumbnail !== 1) {
-    return { ok: false, error: '縮圖尚未產生', status: 404 }
-  }
-
-  const key = thumbnailKey(info.source_id, assetId)
-  const object = await getObject(env, key)
+  const object = await getObject(env, assetKey(core.source_id, core.id, core.extension))
   if (!object) {
-    return { ok: false, error: '縮圖不存在', status: 404 }
+    return { ok: false, error: '檔案不存在', status: 404 }
   }
 
-  return { ok: true, body: object.body, contentType: 'image/jpeg' }
+  try {
+    if (core.type === 'IMAGE') {
+      if (!env.IMAGES) throw new Error('未設定 binding「IMAGES」')
+
+      // anim: false 讓動態 GIF/WebP 只取第一格，跟舊版 PIL 行為一致
+      const result = await env.IMAGES.input(object.body)
+        .transform({ width: THUMBNAIL_MAX_SIDE, height: THUMBNAIL_MAX_SIDE, fit: 'scale-down' })
+        .output({ format: 'image/jpeg', quality: THUMBNAIL_QUALITY, anim: false })
+
+      return { ok: true, body: result.image(), contentType: result.contentType() }
+    }
+
+    if (core.type === 'VIDEO') {
+      if (!env.MEDIA) throw new Error('未設定 binding「MEDIA」')
+
+      const result = env.MEDIA.input(object.body)
+        .transform({ width: THUMBNAIL_MAX_SIDE, height: THUMBNAIL_MAX_SIDE, fit: 'scale-down' })
+        .output({ mode: 'frame', time: VIDEO_FRAME_TIME, format: 'jpg' })
+
+      return { ok: true, body: await result.media(), contentType: await result.contentType() }
+    }
+
+    return { ok: false, error: `未知素材類型: ${core.type}`, status: 400 }
+  } catch (err) {
+    // ImagesError / MediaError 帶有數字 code，一併帶出方便對照文件排查
+    const code = err instanceof Error && 'code' in err ? ` code=${String((err as { code: unknown }).code)}` : ''
+    const reason = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `縮圖轉換失敗 (${core.type} ${core.extension})${code}: ${reason}`, status: 502 }
+  }
 }

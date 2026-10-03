@@ -6,6 +6,16 @@ export interface Env {
    */
   BUCKET: R2Bucket
   /**
+   * Cloudflare Images binding：縮圖 API 用來即時轉換「圖片」素材。變數名稱必須是 `IMAGES`。
+   * wrangler 設定：`"images": { "binding": "IMAGES" }`
+   */
+  IMAGES: ImagesBinding
+  /**
+   * Cloudflare Media Transformations binding：縮圖 API 用來即時擷取「影片」0.5 秒處的畫面。變數名稱必須是 `MEDIA`。
+   * wrangler 設定：`"media": { "binding": "MEDIA" }`（目前為公開 beta；本機開發需加 `"remote": true`）
+   */
+  MEDIA: MediaBinding
+  /**
    * kolafi-worker（合併後的地端 worker，coordinator 對外統一 port）的 base URL，
    * 建立任務後用來打 best-effort 的 `POST {KOLAFI_WORKER_BASE_URL}/notify/<task_type>`。
    * 正式環境下這裡應該是「反向代理」的入口，不是直接連地端 worker。
