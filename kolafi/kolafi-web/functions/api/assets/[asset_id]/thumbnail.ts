@@ -4,8 +4,7 @@ import { jsonError } from '../../../utils/http'
 import { isValidUuid } from '../../../utils/validators'
 
 /**
- * GET /api/assets/:asset_id/thumbnail — 即時產生素材縮圖（JPEG），不需要使用者驗證、不需要專案存取驗證。
- * 從 R2 讀原始檔，圖片走 Images binding、影片走 Media binding（0.5 秒畫面），不讀 R2 的縮圖物件。
+ * GET /api/assets/:asset_id/thumbnail — 代理讀取素材縮圖，不需要使用者驗證、不需要專案存取驗證。
  * 成功時直接回傳縮圖二進位內容（非 JSON 信封）。
  */
 export const onRequestGet: PagesFunction<Env, 'asset_id'> = async (context) => {
