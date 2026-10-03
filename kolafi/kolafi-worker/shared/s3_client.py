@@ -60,6 +60,22 @@ def export_key(project_id, export_id):
     return f"exports/{project_id}/export_{export_id}.mp4"
 
 
+def list_objects(prefix):
+    """列出 prefix 底下所有物件，回傳 [(key, last_modified)]（last_modified 為帶時區的 datetime）。
+
+    先把所有分頁收完再回傳：列舉中途失敗會直接拋出，呼叫端拿不到一份不完整的清單，
+    避免依殘缺清單做出刪除判斷。
+    """
+    client = get_s3_client()
+    logger.debug("列舉 %s", prefix)
+    result = []
+    paginator = client.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            result.append((obj['Key'], obj['LastModified']))
+    return result
+
+
 def download_to_file(key, dest_path):
     """物件不存在回傳 False；其他錯誤直接拋出，由呼叫端視為處理失敗。"""
     client = get_s3_client()

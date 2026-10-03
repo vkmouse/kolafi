@@ -6,6 +6,8 @@ interface CleanupAckRequestBody {
   status?: unknown
   cleanedAssetIds?: unknown
   failedAssetIds?: unknown
+  deletedExportKeys?: unknown
+  failedExportKeys?: unknown
   error?: unknown
 }
 
@@ -46,6 +48,8 @@ export const onRequestPost: PagesFunction<Env, 'task_id'> = async (context) => {
         status: body.status,
         cleanedAssetIds: toStringArray(body.cleanedAssetIds),
         failedAssetIds: toStringArray(body.failedAssetIds),
+        deletedExportKeys: toStringArray(body.deletedExportKeys),
+        failedExportKeys: toStringArray(body.failedExportKeys),
       },
       context.env.DB,
     )

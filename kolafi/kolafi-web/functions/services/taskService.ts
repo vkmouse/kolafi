@@ -13,7 +13,7 @@ import {
 import { findOldestPendingTask, markTaskProcessing, markTaskStatus, getTaskById } from '../repositories/taskRepository'
 import { getProjectDetailCore, getProjectNameById, updateUserProjectCaption } from '../repositories/projectRepository'
 import { listUserConfigsByUserAndName } from '../repositories/userConfigRepository'
-import { insertProjectExport } from '../repositories/exportRepository'
+import { deleteSupersededExports, insertProjectExport, listAllExportRefs } from '../repositories/exportRepository'
 import {
   projectTagNameExists,
   getNextProjectTagSortOrder,
@@ -95,12 +95,35 @@ export interface CleanupPullAssetDto {
   sourceId: string
 }
 
-export interface CleanupPullResult {
-  taskId: string
-  payload: { assets: CleanupPullAssetDto[] }
+export interface CleanupPullExportRefDto {
+  projectId: string
+  exportId: string
 }
 
-/** 全域掃描目前所有可清理的候選素材，不限於觸發這筆任務的那個專案 */
+export interface CleanupPullExportsDto {
+  /** 清理舊列之後 DB 裡剩下的所有匯出；Worker 列出 R2 exports/ 底下的物件，不在這份清單內的就是前端碰不到的 */
+  keep: CleanupPullExportRefDto[]
+  /** 物件 LastModified 距今不足這個秒數者一律不刪，避免誤刪「已上傳到 R2、但 EXPORT ack 還沒寫入 DB」的新匯出 */
+  graceSeconds: number
+}
+
+export interface CleanupPullResult {
+  taskId: string
+  payload: { assets: CleanupPullAssetDto[]; exports: CleanupPullExportsDto }
+}
+
+/** 與 EXPORT worker 上傳到 ack 寫入 DB 之間的時間差相比要足夠寬鬆；匯出本身只需數分鐘 */
+const EXPORT_CLEANUP_GRACE_SECONDS = 3600
+
+/**
+ * 全域掃描目前所有可清理的候選素材，不限於觸發這筆任務的那個專案。
+ *
+ * 匯出檔的清理分兩步，順序固定：
+ *   1. 先刪 DB：每個 (project_id, user_id) 只留最新一筆 project_exports。
+ *   2. 再把清理後 DB 剩下的匯出清單交給 Worker，由 Worker 比對 R2 並刪除不在清單內的物件。
+ * Worker 那一步是「R2 清單 vs 目前 DB」的無狀態比對，所以即使 Worker 在 Pull 之後才失敗，
+ * 已被刪掉 DB 列的 mp4 也會在下一次清理時因為「不在 DB」而被補刪，不需要額外的重試機制。
+ */
 export async function pullCleanupTask(DB: D1Database): Promise<CleanupPullResult | null> {
   const task = await findOldestPendingTask('CLEANUP', DB)
   if (!task) return null
@@ -108,6 +131,10 @@ export async function pullCleanupTask(DB: D1Database): Promise<CleanupPullResult
   await markTaskProcessing(task.id, DB)
 
   const assets = await listAssetsPendingCleanup(DB)
+
+  const removedExportRows = await deleteSupersededExports(DB)
+  const exportRefs = await listAllExportRefs(DB)
+  console.log(`[cleanup] task=${task.id} 刪除舊匯出 DB 列 ${removedExportRows} 筆，保留 ${exportRefs.length} 筆`)
 
   return {
     taskId: task.id,
@@ -117,6 +144,10 @@ export async function pullCleanupTask(DB: D1Database): Promise<CleanupPullResult
         extension: asset.extension,
         sourceId: asset.sourceId,
       })),
+      exports: {
+        keep: exportRefs.map((row) => ({ projectId: row.project_id, exportId: row.id })),
+        graceSeconds: EXPORT_CLEANUP_GRACE_SECONDS,
+      },
     },
   }
 }
@@ -125,9 +156,15 @@ export interface CleanupAckInput {
   status: 'SUCCESS' | 'FAILED'
   cleanedAssetIds: string[]
   failedAssetIds: string[]
+  /** 匯出檔清理結果，只用來記 log（tasks 表沒有欄位可存），不影響任務最終狀態 */
+  deletedExportKeys?: string[]
+  failedExportKeys?: string[]
 }
 
-/** failedAssetIds 刻意不寫入，讓下一次 Pull 自然重新掃到 */
+/**
+ * failedAssetIds 刻意不寫入，讓下一次 Pull 自然重新掃到。
+ * 匯出檔失敗同理：下一次清理仍會因為「不在 DB」重新被列出，所以只記 log，也不參與 SUCCESS/FAILED 的判斷。
+ */
 export async function ackCleanupTask(taskId: string, input: CleanupAckInput, DB: D1Database): Promise<void> {
   if (input.status === 'FAILED') {
     await markTaskStatus(taskId, 'FAILED', DB)
@@ -136,6 +173,12 @@ export async function ackCleanupTask(taskId: string, input: CleanupAckInput, DB:
 
   if (input.cleanedAssetIds.length > 0) {
     await deleteAssetsCleanupBatch(input.cleanedAssetIds, DB)
+  }
+
+  const deletedExports = input.deletedExportKeys?.length ?? 0
+  const failedExports = input.failedExportKeys?.length ?? 0
+  if (deletedExports > 0 || failedExports > 0) {
+    console.log(`[cleanup] task=${taskId} R2 匯出檔：刪除 ${deletedExports} 個、失敗 ${failedExports} 個`, input.failedExportKeys ?? [])
   }
 
   const finalStatus: 'SUCCESS' | 'FAILED' =
