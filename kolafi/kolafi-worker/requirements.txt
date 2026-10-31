@@ -9,7 +9,9 @@ ffmpeg-python
 numpy<2.0.0
 
 # EXPORT 需要：文字轉語音
-edge-tts>=6.1.9
+# 必須 >=7.3.1：Microsoft 的 Edge TTS 服務改用 Sec-MS-GEC v2 驗證，7.2.x 以下會一律 403。
+# 若再出現 403，先升級此套件並重建 image（不要沿用 pip 快取層）。
+edge-tts>=7.3.1
 
 # THUMBNAIL / CLEANUP / EXPORT / DOWNLOAD 需要：物件儲存（shared/s3_client.py）
 # 刻意釘在 1.35.x：boto3 1.36+ 預設會附 CRC32 checksum，R2 不相容；
