@@ -3,6 +3,9 @@
  *
  * login/refresh 自行處理驗證，這裡直接放行；/api/internal/* 是地端 worker
  * 用 Service Token 直打 Access edge 的另一條路徑，邊界防護在 edge，也跳過。
+ * OAuth Server 的端點（register/authorize/token/mcp）呼叫者沒有 Cookie，各自有保護方式
+ * （authorize 靠 Cloudflare Access 的 Service Token、token 靠 code 加 PKCE 或 refresh token
+ * 輪替、mcp 靠 Bearer access token），同樣在此排除。
  * 其餘一律驗 access_token Cookie 的 App JWT，驗不過回 401。
  *
  * 這裡只確認「瀏覽器有沒有通過 Cloudflare Access」，操作歸屬是另一層的事，互不影響。
@@ -11,7 +14,14 @@ import type { Env } from '../types'
 import { verifyAppToken } from '../utils/jwt'
 import { ACCESS_TOKEN_COOKIE_NAME, getCookie } from '../utils/cookie'
 
-const SKIP_AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh'])
+const SKIP_AUTH_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/refresh',
+  '/api/register',
+  '/api/authorize',
+  '/api/token',
+  '/api/mcp',
+])
 const SKIP_AUTH_PREFIXES = ['/api/internal/']
 
 export const onRequest: PagesFunction<Env> = async (context) => {

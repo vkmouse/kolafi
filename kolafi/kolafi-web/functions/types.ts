@@ -16,6 +16,13 @@ export interface Env {
   ACCESS_TEAM_DOMAIN?: string
   ACCESS_AUD?: string
   APP_JWT_SECRET?: string
+  /** 簽發/驗證 OAuth access token 所用的密鑰，與 APP_JWT_SECRET 分開 */
+  OAUTH_JWT_SECRET?: string
+  /**
+   * 選填：固定本站對外的網址（例如 `https://example.com`），用於探索 metadata、
+   * `resource` 比對與 access token 的 `aud`。沒設定就用請求本身的網址。
+   */
+  PUBLIC_ORIGIN?: string
 }
 
 // Auth
@@ -267,4 +274,42 @@ export interface CreateExportTaskBody {
 /** POST /api/tasks/caption request body */
 export interface CreateCaptionTaskBody {
   project_id?: unknown
+}
+
+// OAuth（kolafi 作為 OAuth Server，給 MCP 的 client 用；端點回傳的是協定規定的欄位，不包 { success, data } 信封）
+
+/** POST /api/register request body（RFC 7591 動態用戶端註冊，只收 redirect_uris） */
+export interface RegisterOAuthClientBody {
+  redirect_uris?: unknown
+}
+
+/** POST /api/register 回傳；只有 client_id 與 redirect_uris，沒有 client_secret（public client，靠 PKCE） */
+export interface OAuthClientDto {
+  client_id: string
+  redirect_uris: string[]
+}
+
+/** POST /api/authorize request body（/authorize 畫面把 query string 的參數原樣轉送）；state、resource 選填 */
+export interface AuthorizeOAuthBody {
+  response_type?: unknown
+  client_id?: unknown
+  redirect_uri?: unknown
+  state?: unknown
+  code_challenge?: unknown
+  code_challenge_method?: unknown
+  resource?: unknown
+}
+
+/** POST /api/authorize 回傳；state 有帶才回傳，原封不動 */
+export interface OAuthAuthorizationDto {
+  code: string
+  state?: string
+}
+
+/** POST /api/token 回傳（authorization_code 與 refresh_token 兩種 grant 共用） */
+export interface OAuthTokenDto {
+  access_token: string
+  token_type: 'Bearer'
+  expires_in: number
+  refresh_token: string
 }

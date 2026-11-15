@@ -1,7 +1,10 @@
 <script setup>
+import { useRoute } from 'vue-router'
 import Navigation from './components/Navigation.vue'
 import AccessGate from './components/AccessGate.vue'
 import { initializeAuth } from './services/authService'
+
+const route = useRoute()
 
 /**
  * AccessGate 驗證通過才會觸發（不管是掛載時用舊憑證驗證成功，還是使用者
@@ -21,8 +24,8 @@ async function handleAuthenticated() {
 <template>
   <AccessGate @authenticated="handleAuthenticated">
     <div class="app">
-      <Navigation />
-      <main class="content">
+      <Navigation v-if="!route.meta.hideNavigation" />
+      <main class="content" :class="{ 'content--full': route.meta.hideNavigation }">
         <router-view v-slot="{ Component }">
           <component :is="Component" />
         </router-view>
@@ -106,6 +109,11 @@ body {
 .content {
   flex: 1;
   margin-left: 240px;
+}
+
+/* 不顯示側邊導覽列的頁面（例如 OAuth 授權畫面） */
+.content--full {
+  margin-left: 0;
 }
 
 /* ========================================
@@ -341,6 +349,10 @@ body {
   .content {
     margin-left: 0;
     padding-bottom: 80px; /* 為底部導覽列留空間 */
+  }
+
+  .content--full {
+    padding-bottom: 0;
   }
   
   .page-header {

@@ -8,6 +8,20 @@ export function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+/** 是一般物件（排除 null 與陣列），用來擋掉 JSON body 是 `null`、陣列等合法 JSON 卻不是物件的情況 */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** 必須是非空陣列，且每個元素都是以 `https://` 開頭的字串（只比對開頭）；OAuth 動態註冊的 redirect_uris 用 */
+export function isHttpsUriList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((uri) => typeof uri === 'string' && uri.startsWith('https://'))
+  )
+}
+
 /** 必須是純數字字串；解析失敗、<= 0 或超過 max 一律回退 fallback */
 export function parsePositiveIntParam(raw: string | null, fallback: number, max?: number): number {
   if (raw === null || raw === '') return fallback

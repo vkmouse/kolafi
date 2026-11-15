@@ -91,6 +91,34 @@ const CREATE_TABLE_STATEMENTS: string[] = [
   )`,
   // user_configs.data: JSON 字串
 
+  `CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id TEXT PRIMARY KEY,
+    redirect_uris TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  // oauth_clients.redirect_uris: JSON 陣列字串，授權時只做完全一致比對
+
+  `CREATE TABLE IF NOT EXISTS oauth_codes (
+    code TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  )`,
+  // oauth_codes: 授權碼用完即刪；expires_at 為 epoch ms，過期但沒被用掉的列不會自動清除
+
+  `CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+    token_hash TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    used_at INTEGER,
+    idle_expires_at INTEGER NOT NULL,
+    absolute_expires_at INTEGER NOT NULL
+  )`,
+  // oauth_refresh_tokens.token_hash: refresh token 明文的 SHA-256（小寫 16 進位），明文不落地
+  // oauth_refresh_tokens.family_id: 同一條輪替鏈共用；任何時刻同一條鏈最多只有一列 used_at IS NULL
+  // oauth_refresh_tokens 的時間欄位皆為 epoch ms；absolute_expires_at 在同一條鏈內固定
+
   // --- 索引 ---
   // 依專案+使用者過濾後常要取最新一筆，DESC 讓排序直接吃索引不必額外排序
   `CREATE INDEX IF NOT EXISTS idx_project_exports_project_user_created
